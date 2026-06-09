@@ -6,6 +6,8 @@ export type PlanType = 'heat_pump_storage' | 'gas_booster_peak' | 'battery_disch
 export type PlanStatus = 'pending' | 'approved_level1' | 'approved_level2' | 'executing' | 'completed' | 'rejected';
 export type RepairStatus = 'dispatched' | 'enroute' | 'arrived' | 'repairing' | 'completed';
 export type EventType = 'fault' | 'warning' | 'maintenance' | 'emergency';
+export type VehiclePhase = 'at_base' | 'departing' | 'transit' | 'near_scene' | 'at_scene';
+export type CommandStepKey = 'confirm' | 'backup' | 'dispatch' | 'onsite' | 'resolve';
 
 export interface Vec3 {
   x: number;
@@ -46,6 +48,22 @@ export interface EventRecord {
   status: 'pending' | 'processing' | 'resolved';
 }
 
+export interface CommandStep {
+  key: CommandStepKey;
+  title: string;
+  completed: boolean;
+  time?: string;
+  handler?: string;
+  note?: string;
+}
+export const DEFAULT_COMMAND_STEPS: CommandStep[] = [
+  { key: 'confirm', title: '确认预警', completed: false },
+  { key: 'backup', title: '启用备用能源', completed: false },
+  { key: 'dispatch', title: '派发工单', completed: false },
+  { key: 'onsite', title: '现场处置', completed: false },
+  { key: 'resolve', title: '解除预警', completed: false },
+];
+
 export interface Alert {
   id: string;
   type: AlertType;
@@ -57,6 +75,10 @@ export interface Alert {
   resolved: boolean;
   location?: Vec3;
   buildingIds?: string[];
+  repairOrderId?: string;
+  commandSteps?: CommandStep[];
+  result?: string;
+  resolvedAt?: string;
 }
 
 export interface ApprovalRecord {
@@ -91,6 +113,31 @@ export interface RepairOrder {
   status: RepairStatus;
   eta: string;
   createdAt: string;
+  vehiclePhase?: VehiclePhase;
+  dispatcher?: string;
+  handler?: string;
+  processLog?: { time: string; status: RepairStatus; note: string }[];
+  resolution?: string;
+  completedAt?: string;
+}
+
+export interface IncidentRecord {
+  id: string;
+  type: AlertType;
+  title: string;
+  area: string;
+  level: 1 | 2 | 3;
+  startTime: string;
+  endTime?: string;
+  durationMinutes?: number;
+  alertId: string;
+  location?: Vec3;
+  stationId?: string;
+  result: 'resolved' | 'ongoing';
+  summary: string;
+  process: CommandStep[];
+  impact?: string;
+  repairOrderId?: string;
 }
 
 export interface User {

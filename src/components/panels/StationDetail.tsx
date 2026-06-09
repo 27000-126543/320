@@ -25,7 +25,7 @@ interface StationDetailProps {
 }
 
 export default function StationDetail({ open, onClose }: StationDetailProps) {
-  const { selectedStationId, getStationById, events, toggleBackup, loadHistory } = useStationStore();
+  const { selectedStationId, getStationById, events, setBackupActive, loadHistory } = useStationStore();
   const station = selectedStationId ? getStationById(selectedStationId) : undefined;
 
   const stationEvents = events.filter(e => e.stationId === selectedStationId).slice(0, 8);
@@ -59,7 +59,7 @@ export default function StationDetail({ open, onClose }: StationDetailProps) {
                 station={station}
                 stationEvents={stationEvents}
                 outputData={outputData}
-                onToggleBackup={() => station && toggleBackup(station.id)}
+                onToggleBackup={() => station && setBackupActive(station.id, true)}
                 onClose={onClose}
               />
             ) : (
@@ -152,15 +152,17 @@ function StationContent({ station, stationEvents, outputData, onToggleBackup, on
             <SectionTitle title="当前参数" icon={<Info size={14} />} color="#00D4FF" />
             <button
               onClick={onToggleBackup}
+              disabled={station?.isBackupActive}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition',
                 station.isBackupActive
-                  ? 'bg-safe-green/20 border-safe-green/50 text-safe-green hover:bg-safe-green/30'
-                  : 'bg-alert-red/10 border-alert-red/40 text-alert-red hover:bg-alert-red/20'
+                  ? 'bg-safe-green/20 border-safe-green/50 text-safe-green cursor-default opacity-90'
+                  : 'bg-alert-red/10 border-alert-red/40 text-alert-red hover:bg-alert-red/20',
+                station.isBackupActive && 'shadow-[inset_0_0_15px_rgba(0,230,118,0.25)]',
               )}
             >
               <Power size={12} />
-              {station.isBackupActive ? '关闭备用能源' : '启用备用能源'}
+              {station.isBackupActive ? '✓ 备用能源已投入' : '启用备用能源'}
             </button>
           </div>
           <div className="rounded-lg border border-cyber-blue/20 bg-space-blue/40 overflow-hidden">

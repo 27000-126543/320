@@ -33,6 +33,7 @@ interface StationState {
   startSimulation: () => () => void;
   setSelectedStationId: (id: string | null) => void;
   toggleBackup: (stationId: string) => void;
+  setBackupActive: (stationId: string, active: boolean) => void;
   setStationStatus: (stationId: string, status: EnergyStation['status']) => void;
   getStationById: (id: string) => EnergyStation | undefined;
 }
@@ -55,6 +56,10 @@ export const useStationStore = create<StationState>((set, get) => {
 
     toggleBackup: (stationId) => set(state => ({
       stations: state.stations.map(s => s.id === stationId ? { ...s, isBackupActive: !s.isBackupActive } : s),
+    })),
+
+    setBackupActive: (stationId, active) => set(state => ({
+      stations: state.stations.map(s => s.id === stationId ? { ...s, isBackupActive: active } : s),
     })),
 
     setStationStatus: (stationId, status) => set(state => ({

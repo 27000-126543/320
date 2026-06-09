@@ -10,6 +10,8 @@ import {
   PipelineConnection,
   Vec3,
   DailyReport,
+  IncidentRecord,
+  DEFAULT_COMMAND_STEPS,
 } from '@/types';
 import { generateId, formatDateTime, formatDate } from './formatters';
 
@@ -371,4 +373,77 @@ export const generateDailyReport = (date: string): DailyReport => {
       eventCount: 3,
     },
   };
+};
+
+export const generateMockIncidentRecords = (): IncidentRecord[] => {
+  const generateProcess = (allCompleted: boolean) => {
+    return DEFAULT_COMMAND_STEPS.map((step, idx) => ({
+      ...step,
+      completed: allCompleted ? true : idx < 3,
+      time: allCompleted || idx < 3 ? formatDateTime(new Date(Date.now() - (5 - idx) * randInt(5, 20) * 60 * 1000)) : undefined,
+      handler: (allCompleted || idx < 3) ? ['王晓东', '刘建国', '陈明远', '周海涛', '王晓东'][idx] : undefined,
+      note: (allCompleted || idx < 3) ? [
+        '已通过系统二次校验，确认预警真实有效',
+        '已启动燃气备用储罐，压力恢复正常范围',
+        '抢修工单已派发，抢修一队预计12分钟抵达',
+        '现场处置完成，泄漏点已成功封堵修复',
+        '所有指标恢复正常，预警正式解除',
+      ][idx] : undefined,
+    }));
+  };
+
+  return [
+    {
+      id: generateId(),
+      type: 'gas_leak',
+      title: '严重·燃气泄漏事件',
+      area: '滨江路中段',
+      level: 3,
+      startTime: formatDateTime(new Date(Date.now() - 180 * 60 * 1000)),
+      endTime: formatDateTime(new Date(Date.now() - 145 * 60 * 1000)),
+      durationMinutes: 35,
+      alertId: 'incident-hist-001',
+      location: { x: -8, y: 0, z: -12 },
+      stationId: 'gas-1',
+      result: 'resolved',
+      summary: '滨江路中压燃气管线因第三方施工损坏导致泄漏，经多部门协同处置，35分钟内完成抢修并恢复供气，未造成人员伤亡。',
+      process: generateProcess(true),
+      impact: '影响周边3个小区约1200户居民临时停气约50分钟，经临时供气措施缓解后逐步恢复。',
+      repairOrderId: 'repair-hist-001',
+    },
+    {
+      id: generateId(),
+      type: 'load_overrun',
+      title: '较重·负荷超限事件',
+      area: '高新区核心区',
+      level: 2,
+      startTime: formatDateTime(new Date(Date.now() - 420 * 60 * 1000)),
+      endTime: formatDateTime(new Date(Date.now() - 395 * 60 * 1000)),
+      durationMinutes: 25,
+      alertId: 'incident-hist-002',
+      location: { x: 8, y: 0, z: 0 },
+      stationId: 'sub-2',
+      result: 'resolved',
+      summary: '晚高峰时段高新区负荷突增，启动储能电站联合放电及需求侧响应，25分钟内将负荷控制在安全范围。',
+      process: generateProcess(true),
+      impact: '通过调度措施避免了变电站过载跳闸，核心商圈未受影响，仅部分非重要负荷参与削峰响应。',
+    },
+    {
+      id: generateId(),
+      type: 'equipment_fault',
+      title: '一般·设备故障事件',
+      area: '北区供热站',
+      level: 1,
+      startTime: formatDateTime(new Date(Date.now() - 720 * 60 * 1000)),
+      endTime: formatDateTime(new Date(Date.now() - 690 * 60 * 1000)),
+      durationMinutes: 30,
+      alertId: 'incident-hist-003',
+      location: { x: -10, y: 0, z: 20 },
+      stationId: 'heat-1',
+      result: 'resolved',
+      summary: '1#循环水泵轴承过热触发保护停机，自动切换备用泵，维修人员现场检修更换轴承后恢复。',
+      process: generateProcess(true),
+      impact: '供热压力短暂波动约5分钟，备用系统启动后恢复正常，未对用户造成明显影响。',
+    },
+  ];
 };

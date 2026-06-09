@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, X, Siren, AlertTriangle,
-  Clock, MapPin, Send, Eye,
+  Clock, MapPin, Send, Eye, Wrench,
 } from 'lucide-react';
 import CityScene from '@/components/3d/CityScene';
 import SideMenu from '@/components/panels/SideMenu';
@@ -67,6 +67,7 @@ export default function DashboardPage() {
   const getPrev = () => useStationStore.getState().prevLoadRates;
   const {
     alerts,
+    repairOrders,
     showAlertPopup,
     latestAlert,
     dismissPopup,
@@ -455,13 +456,33 @@ export default function DashboardPage() {
                         <p className="text-xs text-white/90 truncate">
                           {alert.message}
                         </p>
-                        <div className="flex items-center gap-3 mt-1 text-[9px] text-gray-500">
+                        <div className="flex items-center gap-3 mt-1 text-[9px] text-gray-500 flex-wrap">
                           <span className="flex items-center gap-0.5">
                             <Clock size={9} />{alert.triggeredAt}
                           </span>
                           <span className="flex items-center gap-0.5">
                             <MapPin size={9} />{alert.area}
                           </span>
+                          {alert.repairOrderId && (() => {
+                            const ro = repairOrders.find(r => r.id === alert.repairOrderId);
+                            if (!ro) return null;
+                            const statusMap: Record<string, { label: string; color: string }> = {
+                              dispatched: { label: '已派单', color: '#ffaa00' },
+                              enroute: { label: '赶往现场', color: '#00aaff' },
+                              arrived: { label: '已到达', color: '#ff6600' },
+                              repairing: { label: '处置中', color: '#ff4488' },
+                              completed: { label: '已完成', color: '#00ff88' },
+                            };
+                            const cfg = statusMap[ro.status];
+                            return (
+                              <span
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded"
+                                style={{ backgroundColor: `${cfg.color}15`, color: cfg.color, border: `1px solid ${cfg.color}40` }}
+                              >
+                                <Wrench size={9} />{cfg.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                       {/* 快速处置按钮 */}
