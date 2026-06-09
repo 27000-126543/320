@@ -60,6 +60,8 @@ export default function DashboardPage() {
   const { isAuthenticated, currentUser } = useUserStore();
   const startSimulation = useStationStore((s) => s.startSimulation);
   const startAlertDetection = useAlertStore((s) => s.startAlertDetection);
+  const selectedStationId = useStationStore((s) => s.selectedStationId);
+  const setSelectedStationId = useStationStore((s) => s.setSelectedStationId);
   const getStations = useStationStore.getState;
   const getPrev = () => useStationStore.getState().prevLoadRates;
   const {
@@ -98,6 +100,15 @@ export default function DashboardPage() {
       stopAlert();
     };
   }, [isAuthenticated, startSimulation, startAlertDetection, getStations, getPrev]);
+
+  // ===== 3D能源站选中联动：选中站点时自动展开详情 =====
+  useEffect(() => {
+    if (selectedStationId) {
+      setStationDetailOpen(true);
+      setActiveRightPanel('station');
+      if (!rightPanelOpen) setRightPanelOpen(true);
+    }
+  }, [selectedStationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ===== 处理预警处置按钮 =====
   const handleResolveAlert = useCallback((alertId: string) => {
@@ -285,7 +296,10 @@ export default function DashboardPage() {
                         ) : (
                           <StationDetail
                             open={stationDetailOpen}
-                            onClose={() => setStationDetailOpen(false)}
+                            onClose={() => {
+                              setStationDetailOpen(false);
+                              setSelectedStationId(null);
+                            }}
                           />
                         )}
                       </motion.div>

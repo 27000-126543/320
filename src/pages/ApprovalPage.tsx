@@ -341,9 +341,15 @@ function PlanDetailModal({
 export default function ApprovalPage() {
   const { plans, approvePlan, rejectPlan } = useApprovalStore();
   const { currentUser } = useUserStore();
-  const [selectedPlan, setSelectedPlan] = useState<ComplementaryPlan | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<PlanStatus | 'all'>('all');
+
+  // 从 store 实时取最新 plan（关键：保证审批后状态立即更新）
+  const selectedPlan = useMemo(
+    () => selectedPlanId ? plans.find(p => p.id === selectedPlanId) || null : null,
+    [selectedPlanId, plans]
+  );
 
   /**
    * 当前用户可审批的最高层级
@@ -436,13 +442,11 @@ export default function ApprovalPage() {
   const handleApprove = (planId: string, level: 1 | 2 | 3, comment: string) => {
     if (!currentUser) return;
     approvePlan(planId, level, currentUser.name, ROLE_LABEL[currentUser.role], comment);
-    setSelectedPlan(prev => prev ? plans.find(p => p.id === planId) || null : null);
   };
 
   const handleReject = (planId: string, level: 1 | 2 | 3, comment: string) => {
     if (!currentUser) return;
     rejectPlan(planId, level, currentUser.name, ROLE_LABEL[currentUser.role], comment);
-    setSelectedPlan(prev => prev ? plans.find(p => p.id === planId) || null : null);
   };
 
   return (
@@ -746,7 +750,7 @@ export default function ApprovalPage() {
 
       <PlanDetailModal
         plan={selectedPlan}
-        onClose={() => setSelectedPlan(null)}
+        onClose={() => setSelectedPlanId(null)}
         onApprove={handleApprove}
         onReject={handleReject}
         userCanApproveLevel={userApprovalLevel}

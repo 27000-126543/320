@@ -57,7 +57,7 @@ export default function SideMenu({
       key: 'dashboard',
       label: 'Dashboard',
       icon: <LayoutDashboard size={20} />,
-      path: '/',
+      path: '/dashboard',
     },
     {
       key: 'approval',

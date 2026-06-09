@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stars, Grid } from '@react-three/drei';
-import { Suspense, useEffect } from 'react';
+import { Suspense } from 'react';
 import * as THREE from 'three';
 import { useStationStore } from '@/store/useStationStore';
 import { useAlertStore } from '@/store/useAlertStore';
@@ -57,19 +57,6 @@ const SceneContent = () => {
   const pipelines = useStationStore((state) => state.pipelines);
   const alerts = useAlertStore((state) => state.alerts);
   const repairOrders = useAlertStore((state) => state.repairOrders);
-  const startSimulation = useStationStore((state) => state.startSimulation);
-  const startAlertDetection = useAlertStore((state) => state.startAlertDetection);
-  const getStations = useStationStore.getState;
-  const getPrev = () => useStationStore.getState().prevLoadRates;
-
-  useEffect(() => {
-    const stopSim = startSimulation();
-    const stopAlert = startAlertDetection(getStations, getPrev);
-    return () => {
-      stopSim();
-      stopAlert();
-    };
-  }, [startSimulation, startAlertDetection, getStations, getPrev]);
 
   const gasLeakAlerts = alerts.filter((a) => a.type === 'gas_leak' && !a.resolved);
 
