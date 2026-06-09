@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const { isAuthenticated, currentUser } = useUserStore();
   const startSimulation = useStationStore((s) => s.startSimulation);
   const startAlertDetection = useAlertStore((s) => s.startAlertDetection);
+  const startRepairSimulation = useAlertStore((s) => s.startRepairSimulation);
   const selectedStationId = useStationStore((s) => s.selectedStationId);
   const setSelectedStationId = useStationStore((s) => s.setSelectedStationId);
   const getStations = useStationStore.getState;
@@ -85,21 +86,20 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, navigate]);
 
-  // ===== 启动模拟循环：能源站数据 + 预警检测 =====
+  // ===== 启动模拟循环：能源站数据 + 预警检测 + 抢修工单推进 =====
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // 启动能源站模拟循环
     const stopSimulation = startSimulation();
-    // 启动预警检测循环
     const stopAlert = startAlertDetection(getStations, getPrev);
+    const stopRepair = startRepairSimulation();
 
-    // 组件卸载时清理定时器
     return () => {
       stopSimulation();
       stopAlert();
+      stopRepair();
     };
-  }, [isAuthenticated, startSimulation, startAlertDetection, getStations, getPrev]);
+  }, [isAuthenticated, startSimulation, startAlertDetection, startRepairSimulation, getStations, getPrev]);
 
   // ===== 3D能源站选中联动：选中站点时自动展开详情 =====
   useEffect(() => {
