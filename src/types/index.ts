@@ -1,7 +1,7 @@
 export type EnergyStationType = 'substation' | 'heat_station' | 'gas_station' | 'storage_station' | 'building';
 export type StationStatus = 'normal' | 'warning' | 'critical' | 'offline';
 export type UserRole = 'operator' | 'dispatcher' | 'director' | 'bureau';
-export type AlertType = 'load_overrun' | 'pressure_overrun' | 'gas_leak' | 'equipment_fault';
+export type AlertType = 'load_overrun' | 'pressure_overrun' | 'gas_leak' | 'equipment_fault' | 'grid_overload';
 export type PlanType = 'heat_pump_storage' | 'gas_booster_peak' | 'battery_discharge' | 'grid_transfer';
 export type PlanStatus = 'pending' | 'approved_level1' | 'approved_level2' | 'executing' | 'completed' | 'rejected';
 export type RepairStatus = 'dispatched' | 'enroute' | 'arrived' | 'repairing' | 'completed';
@@ -121,6 +121,45 @@ export interface RepairOrder {
   completedAt?: string;
 }
 
+export interface ReplayState {
+  incidentId: string | null;
+  playing: boolean;
+  isPlaying: boolean;
+  currentStepIndex: number;
+  totalSteps: number;
+}
+
+export type GridOverloadImpact = {
+  affectedBuildings?: { id: string; name: string; code: string }[];
+  peakLoad?: number;
+  peakLoadTime?: string;
+  backupActivated?: boolean;
+  backupActivatedTime?: string;
+  recoveryTime?: string;
+  recoveryEffect?: string;
+};
+
+export type GasLeakImpact = {
+  repairTeamArrivalTime?: string;
+  repairDurationMinutes?: number;
+  leakPointStatus?: 'sealed' | 'isolated' | 'monitoring';
+  gasPressureRestoreTime?: string;
+};
+
+export interface IncidentImpactAnalysis {
+  affectedBuildings?: { id: string; name: string; code: string }[];
+  peakLoad?: number;
+  peakLoadTime?: string;
+  backupActivated?: boolean;
+  backupStartTime?: string;
+  recoveryTime?: string;
+  recoveryEffect?: string;
+  repairTeamArrivalTime?: string;
+  repairDurationMinutes?: number;
+  leakPointStatus?: 'sealed' | 'isolated' | 'monitoring';
+  gasPressureRestoreTime?: string;
+}
+
 export interface IncidentRecord {
   id: string;
   type: AlertType;
@@ -136,8 +175,12 @@ export interface IncidentRecord {
   result: 'resolved' | 'ongoing';
   summary: string;
   process: CommandStep[];
+  impactAnalysis?: IncidentImpactAnalysis;
+  gridOverloadImpact?: GridOverloadImpact;
+  gasLeakImpact?: GasLeakImpact;
   impact?: string;
   repairOrderId?: string;
+  repairTeamId?: string;
 }
 
 export interface User {

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Alert, RepairOrder, RepairStatus, IncidentRecord, DEFAULT_COMMAND_STEPS, CommandStepKey, CommandStep } from '@/types';
+import { Alert, RepairOrder, RepairStatus, IncidentRecord, DEFAULT_COMMAND_STEPS, CommandStepKey, CommandStep, ReplayState, IncidentImpactAnalysis, EnergyStation, GridOverloadImpact, GasLeakImpact } from '@/types';
 import { generateMockAlerts, generateMockStations, generateMockRepairOrders } from '@/utils/mockData';
 import { detectAnomalies } from '@/utils/energyAlgorithm';
 import { generateId, formatDateTime } from '@/utils/formatters';
@@ -10,6 +10,8 @@ interface AlertState {
   repairOrders: RepairOrder[];
   incidentRecords: IncidentRecord[];
   highlightedIncidentId: string | null;
+  focusIncidentId: string | null;
+  replayState: ReplayState;
   showAlertPopup: boolean;
   latestAlert: Alert | null;
   repairTimers: Record<string, number>;
@@ -23,17 +25,73 @@ interface AlertState {
   dismissPopup: () => void;
   advanceRepairStatus: (orderId: string) => void;
   advanceCommandStep: (alertId: string, stepKey: CommandStepKey, handler: string, note: string) => void;
+  advanceAllRemainingSteps: (alertId: string, handler: string) => void;
   setHighlightedIncident: (id: string | null) => void;
+  focusIncident: (incidentId: string | null) => void;
+  setFocusIncident: (incidentId: string | null) => void;
+  setReplayState: (patch: Partial<ReplayState>) => void;
   getIncidentById: (id: string) => IncidentRecord | undefined;
+  generateImpactFromAlert: (alert: Alert, ro?: RepairOrder) => IncidentImpactAnalysis;
+  createIncidentRecordFromAlert: (alert: Alert, ro?: RepairOrder) => IncidentRecord;
 }
 
 const REPAIR_FLOW: RepairStatus[] = ['dispatched', 'enroute', 'arrived', 'repairing', 'completed'];
+
+const generateImpactFromAlert = (alert: Alert, repairOrder?: RepairOrder): IncidentImpactAnalysis => {
+  const stationStore = useStationStore.getState();
+  const endTime = alert.resolvedAt || formatDateTime();
+  const analysis: IncidentImpactAnalysis = {};
+
+  if (alert.buildingIds && alert.buildingIds.length > 0) {
+    analysis.affectedBuildings = alert.buildingIds
+      .map(bid => {
+        const st = stationStore.getStationById(bid);
+        if (st) return { id: st.id, name: st.name, code: st.code };
+        return null;
+      })
+      .filter(Boolean) as { id: string; name: string; code: string }[];
+  }
+
+  if (alert.type === 'grid_overload' || alert.type === 'load_overrun' || alert.type === 'pressure_overrun') {
+    let peakLoad = Math.round(92 + Math.random() * 7);
+    if (alert.stationId) {
+      const st = stationStore.getStationById(alert.stationId);
+      if (st && st.loadRate > 0) {
+        peakLoad = Math.max(peakLoad, Math.round(Math.min(98, st.loadRate * 100)));
+      }
+    }
+    analysis.peakLoad = peakLoad;
+    analysis.peakLoadTime = alert.triggeredAt;
+    analysis.backupActivated = true;
+    analysis.backupStartTime = alert.triggeredAt;
+    analysis.recoveryTime = endTime;
+    analysis.recoveryEffect = `系统负荷已恢复至正常范围(${Math.round(65 + Math.random() * 15)}%)`;
+  }
+
+  if (alert.type === 'gas_leak') {
+    let durationMinutes = 0;
+    try {
+      const start = new Date(alert.triggeredAt.replace(/\//g, '-'));
+      const end = new Date(endTime.replace(/\//g, '-'));
+      durationMinutes = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+    } catch (_e) {
+      durationMinutes = 8;
+    }
+    analysis.repairTeamArrivalTime = repairOrder?.processLog?.find(l => l.status === 'arrived')?.time;
+    analysis.repairDurationMinutes = Math.max(8, durationMinutes);
+    analysis.leakPointStatus = 'sealed';
+    analysis.gasPressureRestoreTime = endTime;
+  }
+
+  return analysis;
+};
 
 const createIncidentRecordFromAlert = (alert: Alert, repairOrder?: RepairOrder): IncidentRecord => {
   const levelLabel = alert.level === 1 ? '一般' : alert.level === 2 ? '较大' : '重大';
   const typeLabel = alert.type === 'gas_leak' ? '燃气泄漏'
     : alert.type === 'load_overrun' ? '负载超限'
     : alert.type === 'pressure_overrun' ? '压力异常'
+    : alert.type === 'grid_overload' ? '电网负荷超限'
     : '设备故障';
   const endTime = alert.resolvedAt || formatDateTime();
   let durationMinutes = 0;
@@ -44,6 +102,35 @@ const createIncidentRecordFromAlert = (alert: Alert, repairOrder?: RepairOrder):
   } catch (_e) {
     durationMinutes = 1;
   }
+
+  const impactAnalysis = generateImpactFromAlert(alert, repairOrder);
+
+  const isGridType = alert.type === 'grid_overload' || alert.type === 'load_overrun' || alert.type === 'pressure_overrun';
+  const isGasType = alert.type === 'gas_leak';
+
+  let gridOverloadImpact: GridOverloadImpact | undefined;
+  let gasLeakImpact: GasLeakImpact | undefined;
+
+  if (isGridType) {
+    gridOverloadImpact = {
+      affectedBuildings: impactAnalysis.affectedBuildings,
+      peakLoad: impactAnalysis.peakLoad,
+      peakLoadTime: impactAnalysis.peakLoadTime,
+      backupActivated: impactAnalysis.backupActivated,
+      backupActivatedTime: impactAnalysis.backupStartTime,
+      recoveryTime: impactAnalysis.recoveryTime,
+      recoveryEffect: impactAnalysis.recoveryEffect,
+    };
+  }
+  if (isGasType) {
+    gasLeakImpact = {
+      repairTeamArrivalTime: impactAnalysis.repairTeamArrivalTime,
+      repairDurationMinutes: impactAnalysis.repairDurationMinutes,
+      leakPointStatus: impactAnalysis.leakPointStatus,
+      gasPressureRestoreTime: impactAnalysis.gasPressureRestoreTime,
+    };
+  }
+
   return {
     id: generateId(),
     type: alert.type,
@@ -59,8 +146,12 @@ const createIncidentRecordFromAlert = (alert: Alert, repairOrder?: RepairOrder):
     result: alert.resolved ? 'resolved' : 'ongoing',
     summary: alert.result || alert.message,
     process: alert.commandSteps || DEFAULT_COMMAND_STEPS.map(s => ({ ...s })),
-    impact: alert.buildingIds ? `影响用户建筑 ${alert.buildingIds.length} 处` : undefined,
+    impactAnalysis,
+    gridOverloadImpact,
+    gasLeakImpact,
+    impact: alert.result,
     repairOrderId: alert.repairOrderId || repairOrder?.id,
+    repairTeamId: repairOrder?.teamId,
   };
 };
 
@@ -69,6 +160,8 @@ export const useAlertStore = create<AlertState>((set, get) => ({
   repairOrders: generateMockRepairOrders(),
   incidentRecords: [],
   highlightedIncidentId: null,
+  focusIncidentId: null,
+  replayState: { incidentId: null, playing: false, isPlaying: false, currentStepIndex: 0, totalSteps: 0 },
   showAlertPopup: false,
   latestAlert: null,
   repairTimers: {},
@@ -258,10 +351,29 @@ export const useAlertStore = create<AlertState>((set, get) => ({
         }
       });
     }
+    const now = formatDateTime();
+    const commandSteps = alert.commandSteps ? alert.commandSteps.map(s => ({ ...s })) : DEFAULT_COMMAND_STEPS.map(s => ({ ...s }));
+    const confirmStep = commandSteps.find(s => s.key === 'confirm');
+    if (confirmStep) {
+      confirmStep.completed = true;
+      confirmStep.time = alert.triggeredAt || formatDateTime();
+      confirmStep.handler = '系统自动';
+      confirmStep.note = 'AI anomaly detection confirmed';
+    }
+    if (alert.stationId && (alert.type === 'grid_overload' || alert.type === 'load_overrun' || alert.type === 'pressure_overrun')) {
+      const backupStep = commandSteps.find(s => s.key === 'backup');
+      if (backupStep && !backupStep.completed) {
+        backupStep.completed = true;
+        backupStep.time = now;
+        backupStep.handler = '系统联动';
+        backupStep.note = '备用能源自动启用';
+      }
+    }
+    const finalAlert = { ...alert, commandSteps };
     set(state => ({
-      alerts: [alert, ...state.alerts],
+      alerts: [finalAlert, ...state.alerts],
       showAlertPopup: true,
-      latestAlert: alert,
+      latestAlert: finalAlert,
     }));
   },
 
@@ -402,13 +514,13 @@ export const useAlertStore = create<AlertState>((set, get) => ({
       );
 
       let newIncidentRecords = state.incidentRecords;
-      const allStepsDone = newCommandSteps.every(s => s.completed);
-      if (allStepsDone) {
+      if (stepKey === 'resolve') {
         const alreadyExists = state.incidentRecords.some(ir => ir.alertId === alertId);
         if (!alreadyExists) {
           const finalAlert = updatedAlerts.find(a => a.id === alertId)!;
           const repairOrder = state.repairOrders.find(o => o.alertId === alertId || o.id === alert.repairOrderId);
-          newIncidentRecords = [createIncidentRecordFromAlert(finalAlert, repairOrder), ...state.incidentRecords];
+          const newRecord = createIncidentRecordFromAlert(finalAlert, repairOrder);
+          newIncidentRecords = [newRecord, ...state.incidentRecords];
         }
       }
 
@@ -419,7 +531,133 @@ export const useAlertStore = create<AlertState>((set, get) => ({
     });
   },
 
+  advanceAllRemainingSteps: (alertId: string, handler: string) => {
+    set(state => {
+      const alert = state.alerts.find(a => a.id === alertId);
+      if (!alert) return {};
+      const now = formatDateTime();
+      const newCommandSteps: CommandStep[] = alert.commandSteps
+        ? alert.commandSteps.map(s => ({ ...s }))
+        : DEFAULT_COMMAND_STEPS.map(s => ({ ...s }));
+
+      const stationStore = useStationStore.getState();
+      let resolved = alert.resolved;
+      let resolvedAt = alert.resolvedAt;
+      let result = alert.result;
+
+      newCommandSteps.forEach((step) => {
+        if (step.completed) return;
+
+        switch (step.key) {
+          case 'confirm':
+            step.completed = true;
+            step.time = alert.triggeredAt || formatDateTime();
+            step.handler = '系统自动';
+            step.note = 'AI anomaly detection confirmed';
+            break;
+          case 'backup':
+            if (alert.stationId) {
+              const st = stationStore.getStationById(alert.stationId);
+              if (st && !st.isBackupActive) {
+                stationStore.setBackupActive(alert.stationId, true);
+              }
+            }
+            step.completed = true;
+            step.time = now;
+            step.handler = '系统联动';
+            step.note = '备用能源自动启用';
+            break;
+          case 'dispatch':
+            if (alert.type === 'gas_leak') {
+              break;
+            }
+            step.completed = true;
+            step.time = now;
+            step.handler = handler;
+            step.note = '调度员已派单';
+            break;
+          case 'onsite':
+            step.completed = true;
+            step.time = now;
+            step.handler = handler;
+            step.note = '现场处置完成';
+            break;
+          case 'resolve':
+            step.completed = true;
+            step.time = now;
+            step.handler = handler;
+            step.note = '调度员确认解除';
+            resolved = true;
+            resolvedAt = now;
+            result = `预警已解除：调度员确认解除`;
+            break;
+          default:
+            step.completed = true;
+            step.time = now;
+            step.handler = handler;
+            step.note = '流程完成';
+            break;
+        }
+      });
+
+      const updatedAlerts = state.alerts.map(a =>
+        a.id === alertId
+          ? { ...a, commandSteps: newCommandSteps, resolved, resolvedAt, result }
+          : a
+      );
+
+      let newIncidentRecords = state.incidentRecords;
+      const alreadyExists = state.incidentRecords.some(ir => ir.alertId === alertId);
+      if (!alreadyExists) {
+        const finalAlert = updatedAlerts.find(a => a.id === alertId)!;
+        const repairOrder = state.repairOrders.find(o => o.alertId === alertId || o.id === alert.repairOrderId);
+        const newRecord = createIncidentRecordFromAlert(finalAlert, repairOrder);
+        newIncidentRecords = [newRecord, ...state.incidentRecords];
+      }
+
+      return {
+        alerts: updatedAlerts,
+        incidentRecords: newIncidentRecords,
+      };
+    });
+  },
+
   setHighlightedIncident: (id: string | null) => set({ highlightedIncidentId: id }),
+
+  setReplayState: (patch: Partial<ReplayState>) => set(s => {
+    const mergedPatch = { ...patch };
+    if ('isPlaying' in mergedPatch && !('playing' in mergedPatch)) {
+      (mergedPatch as any).playing = mergedPatch.isPlaying;
+    }
+    if ('playing' in mergedPatch && !('isPlaying' in mergedPatch)) {
+      (mergedPatch as any).isPlaying = mergedPatch.playing;
+    }
+    return {
+      replayState: { ...s.replayState, ...mergedPatch },
+    };
+  }),
+
+  focusIncident: (incidentId: string | null) => set(s => ({
+    focusIncidentId: incidentId,
+    replayState: {
+      incidentId,
+      playing: false,
+      isPlaying: false,
+      currentStepIndex: 0,
+      totalSteps: incidentId
+        ? (s.incidentRecords.find(r => r.id === incidentId)?.process.length || 5)
+        : 0,
+    },
+  })),
+
+  setFocusIncident: (incidentId: string | null) => {
+    const getState = useAlertStore.getState;
+    getState().focusIncident(incidentId);
+  },
+
+  generateImpactFromAlert: (alert: Alert, ro?: RepairOrder) => generateImpactFromAlert(alert, ro),
+
+  createIncidentRecordFromAlert: (alert: Alert, ro?: RepairOrder) => createIncidentRecordFromAlert(alert, ro),
 
   getIncidentById: (id: string) => get().incidentRecords.find(ir => ir.id === id),
 }));

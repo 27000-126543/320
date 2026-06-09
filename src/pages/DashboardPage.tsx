@@ -24,6 +24,7 @@ const ALERT_TYPE_CONFIG: Record<AlertType, { label: string; color: string }> = {
   pressure_overrun: { label: '压力异常', color: '#FF6B35' },
   gas_leak: { label: '燃气泄漏', color: '#00C48C' },
   equipment_fault: { label: '设备故障', color: '#9C27B0' },
+  grid_overload: { label: '电网负荷超限', color: '#FF9800' },
 };
 
 /** 预警等级配置 */
@@ -72,6 +73,7 @@ export default function DashboardPage() {
     latestAlert,
     dismissPopup,
     resolveAlert,
+    advanceAllRemainingSteps,
   } = useAlertStore();
 
   // ===== 本地 UI 状态 =====
@@ -113,8 +115,8 @@ export default function DashboardPage() {
 
   // ===== 处理预警处置按钮 =====
   const handleResolveAlert = useCallback((alertId: string) => {
-    resolveAlert(alertId);
-  }, [resolveAlert]);
+    advanceAllRemainingSteps(alertId, '调度员快捷处置');
+  }, [advanceAllRemainingSteps]);
 
   // ===== 右侧面板标签配置 =====
   const rightPanelTabs: RightPanelTab[] = [

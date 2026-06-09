@@ -2,8 +2,9 @@ import { useRef, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html, Edges } from '@react-three/drei';
 import * as THREE from 'three';
-import { EnergyStation, STATION_COLOR, STATION_TYPE_LABEL, STATUS_LABEL } from '@/types';
+import { EnergyStation, STATION_COLOR, STATION_TYPE_LABEL, STATUS_LABEL, AlertType } from '@/types';
 import { useStationStore } from '@/store/useStationStore';
+import { useAlertStore } from '@/store/useAlertStore';
 
 interface EnergyStation3DProps {
   station: EnergyStation;
@@ -16,12 +17,12 @@ const STATUS_COLORS: Record<string, string> = {
   offline: '#666666',
 };
 
-const SubstationModel = ({ color }: { color: string }) => (
+const SubstationModel = ({ color, highlightColor }: { color: string; highlightColor?: string }) => (
   <group>
     <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
       <boxGeometry args={[4, 3, 3]} />
       <meshStandardMaterial color="#334455" metalness={0.7} roughness={0.3} />
-      <Edges color={color} threshold={15} scale={1.01} />
+      <Edges color={highlightColor || color} threshold={15} scale={highlightColor ? 1.03 : 1.01} />
     </mesh>
     <mesh position={[-1.2, 4, 0]} castShadow>
       <cylinderGeometry args={[0.15, 0.15, 2.5, 8]} />
@@ -42,12 +43,12 @@ const SubstationModel = ({ color }: { color: string }) => (
   </group>
 );
 
-const HeatStationModel = ({ color }: { color: string }) => (
+const HeatStationModel = ({ color, highlightColor }: { color: string; highlightColor?: string }) => (
   <group>
     <mesh position={[0, 2, 0]} castShadow receiveShadow>
       <cylinderGeometry args={[2, 2.2, 4, 16]} />
       <meshStandardMaterial color="#4a3a2a" metalness={0.6} roughness={0.4} />
-      <Edges color={color} threshold={15} scale={1.01} />
+      <Edges color={highlightColor || color} threshold={15} scale={highlightColor ? 1.03 : 1.01} />
     </mesh>
     <mesh position={[1.2, 4, 0]} castShadow>
       <cylinderGeometry args={[0.35, 0.4, 3, 12]} />
@@ -64,17 +65,17 @@ const HeatStationModel = ({ color }: { color: string }) => (
   </group>
 );
 
-const GasStationModel = ({ color }: { color: string }) => (
+const GasStationModel = ({ color, highlightColor }: { color: string; highlightColor?: string }) => (
   <group>
     <mesh position={[-1.5, 2, 0]} castShadow receiveShadow>
       <sphereGeometry args={[1.8, 16, 16]} />
       <meshStandardMaterial color="#2a4a3a" metalness={0.7} roughness={0.3} />
-      <Edges color={color} threshold={15} scale={1.01} />
+      <Edges color={highlightColor || color} threshold={15} scale={highlightColor ? 1.03 : 1.01} />
     </mesh>
     <mesh position={[1.8, 1.5, 0]} castShadow receiveShadow>
       <boxGeometry args={[2, 3, 2]} />
       <meshStandardMaterial color="#3a4a3a" metalness={0.6} roughness={0.4} />
-      <Edges color={color} threshold={15} scale={1.01} />
+      <Edges color={highlightColor || color} threshold={15} scale={highlightColor ? 1.03 : 1.01} />
     </mesh>
     <mesh position={[0, 3.5, 0]} castShadow>
       <cylinderGeometry args={[0.1, 0.1, 2, 6]} />
@@ -87,17 +88,17 @@ const GasStationModel = ({ color }: { color: string }) => (
   </group>
 );
 
-const StorageStationModel = ({ color }: { color: string }) => (
+const StorageStationModel = ({ color, highlightColor }: { color: string; highlightColor?: string }) => (
   <group>
     <mesh position={[-1.8, 1.5, 0]} castShadow receiveShadow>
       <boxGeometry args={[1.8, 3, 2.5]} />
       <meshStandardMaterial color="#4a2a5a" metalness={0.7} roughness={0.3} />
-      <Edges color={color} threshold={15} scale={1.01} />
+      <Edges color={highlightColor || color} threshold={15} scale={highlightColor ? 1.03 : 1.01} />
     </mesh>
     <mesh position={[1.8, 1.5, 0]} castShadow receiveShadow>
       <boxGeometry args={[1.8, 3, 2.5]} />
       <meshStandardMaterial color="#4a2a5a" metalness={0.7} roughness={0.3} />
-      <Edges color={color} threshold={15} scale={1.01} />
+      <Edges color={highlightColor || color} threshold={15} scale={highlightColor ? 1.03 : 1.01} />
     </mesh>
     <mesh position={[0, 4, 0]} castShadow>
       <boxGeometry args={[5, 0.4, 2.8]} />
@@ -110,7 +111,7 @@ const StorageStationModel = ({ color }: { color: string }) => (
   </group>
 );
 
-const BuildingModel = ({ color, index = 0 }: { color: string; index?: number }) => {
+const BuildingModel = ({ color, index = 0, highlightColor }: { color: string; index?: number; highlightColor?: string }) => {
   const heights = [6, 8, 5, 10, 7, 9, 11, 6];
   const height = heights[index % heights.length];
   const floors = Math.floor(height / 1.5);
@@ -119,7 +120,7 @@ const BuildingModel = ({ color, index = 0 }: { color: string; index?: number }) 
       <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[3, height, 3]} />
         <meshStandardMaterial color="#2a3a4a" metalness={0.5} roughness={0.5} />
-        <Edges color={color} threshold={15} scale={1.01} />
+        <Edges color={highlightColor || color} threshold={15} scale={highlightColor ? 1.03 : 1.01} />
       </mesh>
       {Array.from({ length: floors }).map((_, i) => (
         <mesh key={i} position={[0, 1 + i * 1.5, 1.51]}>
@@ -139,22 +140,24 @@ const BuildingModel = ({ color, index = 0 }: { color: string; index?: number }) 
   );
 };
 
-const getStationModel = (type: EnergyStation['type'], color: string, index: number) => {
+const getStationModel = (type: EnergyStation['type'], color: string, index: number, highlightColor?: string) => {
   switch (type) {
     case 'substation':
-      return <SubstationModel color={color} />;
+      return <SubstationModel color={color} highlightColor={highlightColor} />;
     case 'heat_station':
-      return <HeatStationModel color={color} />;
+      return <HeatStationModel color={color} highlightColor={highlightColor} />;
     case 'gas_station':
-      return <GasStationModel color={color} />;
+      return <GasStationModel color={color} highlightColor={highlightColor} />;
     case 'storage_station':
-      return <StorageStationModel color={color} />;
+      return <StorageStationModel color={color} highlightColor={highlightColor} />;
     case 'building':
-      return <BuildingModel color={color} index={index} />;
+      return <BuildingModel color={color} index={index} highlightColor={highlightColor} />;
     default:
       return null;
   }
 };
+
+const HIGHLIGHT_INCIDENT_TYPES: AlertType[] = ['load_overrun', 'pressure_overrun'];
 
 const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -163,6 +166,10 @@ const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
   const setSelectedStationId = useStationStore((state) => state.setSelectedStationId);
   const backupGlowRef = useRef<THREE.Mesh>(null);
   const statusRingRef = useRef<THREE.Mesh>(null);
+  const outerRingRef = useRef<THREE.Mesh>(null);
+  const highlightShellRef = useRef<THREE.Mesh>(null);
+
+  const { highlightedIncidentId, focusIncidentId, incidentRecords } = useAlertStore();
 
   const isSelected = selectedStationId === station.id;
   const baseColor = STATION_COLOR[station.type];
@@ -171,6 +178,22 @@ const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
     () => parseInt(station.id.replace(/\D/g, ''), 10) || 0,
     [station.id],
   );
+
+  const matchedIncident = useMemo(() => {
+    const activeIncidentId = focusIncidentId || highlightedIncidentId;
+    if (!activeIncidentId) return null;
+    const incident = incidentRecords.find(r => r.id === activeIncidentId);
+    if (!incident) return null;
+    if (incident.stationId === station.id) return incident;
+    if (incident.buildingIds && incident.buildingIds.includes(station.id)) return incident;
+    return null;
+  }, [highlightedIncidentId, focusIncidentId, incidentRecords, station.id]);
+
+  const isIncidentHighlighted = !!matchedIncident;
+  const isIncidentFocused = !!(focusIncidentId && matchedIncident && matchedIncident.id === focusIncidentId);
+
+  const highlightColor = isIncidentFocused ? '#ff2266' : '#ff6600';
+  const outerRingScale = station.type === 'building' ? 2.5 * 1.3 : 3.2 * 1.3;
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
@@ -184,8 +207,26 @@ const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
       statusRingRef.current.rotation.y = t * 0.8;
       statusRingRef.current.position.y = 0.3 + Math.sin(t * 2) * 0.05;
     }
-    if (groupRef.current && isSelected) {
-      groupRef.current.position.y = station.position.y + Math.sin(t * 1.5) * 0.15;
+    if (outerRingRef.current && isIncidentHighlighted) {
+      const pulseSpeed = isIncidentFocused ? 6 : 4;
+      const pulse = 0.5 + Math.sin(t * pulseSpeed) * 0.5;
+      const baseScale = isIncidentFocused ? 1.35 : 1.3;
+      outerRingRef.current.scale.setScalar(baseScale + pulse * (isIncidentFocused ? 0.25 : 0.15));
+      const mat = outerRingRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = (isIncidentFocused ? 3 : 2) + pulse * (isIncidentFocused ? 2 : 1.2);
+      mat.opacity = 0.7 + pulse * 0.25;
+    }
+    if (highlightShellRef.current && isIncidentHighlighted) {
+      const pulseSpeed = isIncidentFocused ? 5 : 3;
+      const pulse = 0.5 + Math.sin(t * pulseSpeed) * 0.5;
+      highlightShellRef.current.scale.setScalar(1.02 + pulse * 0.02);
+      const mat = highlightShellRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.06 + pulse * (isIncidentFocused ? 0.08 : 0.05);
+    }
+    if (groupRef.current && (isSelected || isIncidentFocused)) {
+      const bobSpeed = isIncidentFocused ? 2.5 : 1.5;
+      const bobAmp = isIncidentFocused ? 0.25 : 0.15;
+      groupRef.current.position.y = station.position.y + Math.sin(t * bobSpeed) * bobAmp;
     } else if (groupRef.current) {
       groupRef.current.position.y = station.position.y;
     }
@@ -211,7 +252,26 @@ const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
         document.body.style.cursor = 'default';
       }}
     >
-      {getStationModel(station.type, baseColor, buildingIndex)}
+      {getStationModel(station.type, baseColor, buildingIndex, isIncidentHighlighted ? highlightColor : undefined)}
+
+      {isIncidentHighlighted && (
+        <mesh
+          ref={highlightShellRef}
+          position={[0, station.type === 'building' ? 4 : 3, 0]}
+        >
+          <boxGeometry args={[
+            station.type === 'building' ? 3.8 : 5.2,
+            station.type === 'building' ? 10.8 : 6.8,
+            station.type === 'building' ? 3.8 : 4.8,
+          ]} />
+          <meshBasicMaterial
+            color={highlightColor}
+            transparent
+            side={THREE.BackSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
 
       <mesh ref={statusRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.3, 0]}>
         <torusGeometry args={[station.type === 'building' ? 2.5 : 3.2, 0.05, 8, 48]} />
@@ -223,6 +283,23 @@ const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
           opacity={0.9}
         />
       </mesh>
+
+      {isIncidentHighlighted && (
+        <mesh
+          ref={outerRingRef}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0.4, 0]}
+        >
+          <torusGeometry args={[outerRingScale, 0.12, 12, 64]} />
+          <meshStandardMaterial
+            color={highlightColor}
+            emissive={highlightColor}
+            transparent
+            opacity={0.85}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
 
       {(hovered || isSelected) && (
         <mesh position={[0, station.type === 'building' ? 4 : 3, 0]}>
@@ -260,12 +337,12 @@ const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
 
       <pointLight
         position={[0, station.type === 'building' ? 5 : 4, 0]}
-        color={statusColor}
-        intensity={isSelected ? 2 : hovered ? 1.2 : 0.6}
-        distance={12}
+        color={isIncidentHighlighted ? highlightColor : statusColor}
+        intensity={isIncidentFocused ? 4 : isIncidentHighlighted ? 2.5 : isSelected ? 2 : hovered ? 1.2 : 0.6}
+        distance={isIncidentFocused ? 20 : isIncidentHighlighted ? 16 : 12}
       />
 
-      {(hovered || isSelected) && (
+      {(hovered || isSelected || isIncidentHighlighted) && (
         <Html
           position={[0, station.type === 'building' ? 9 : 7, 0]}
           center
@@ -274,20 +351,26 @@ const EnergyStation3D = ({ station }: EnergyStation3DProps) => {
         >
           <div
             style={{
-              background: 'rgba(10, 22, 40, 0.95)',
-              border: `1px solid ${isSelected ? '#ffffff' : baseColor}`,
+              background: isIncidentHighlighted
+                ? 'rgba(40, 15, 20, 0.95)'
+                : 'rgba(10, 22, 40, 0.95)',
+              border: `1px solid ${isIncidentHighlighted ? highlightColor : isSelected ? '#ffffff' : baseColor}`,
               borderRadius: '8px',
               padding: '10px 14px',
               color: '#ffffff',
               fontSize: '12px',
               whiteSpace: 'nowrap',
-              boxShadow: `0 0 20px ${baseColor}44`,
+              boxShadow: isIncidentHighlighted
+                ? `0 0 24px ${highlightColor}66`
+                : `0 0 20px ${baseColor}44`,
               pointerEvents: 'none',
               fontFamily: 'system-ui, sans-serif',
             }}
           >
-            <div style={{ fontWeight: 700, color: baseColor, marginBottom: 4, fontSize: 13 }}>
+            <div style={{ fontWeight: 700, color: isIncidentHighlighted ? highlightColor : baseColor, marginBottom: 4, fontSize: 13 }}>
               {station.name}
+              {isIncidentFocused && ' ⚡ 聚焦中'}
+              {isIncidentHighlighted && !isIncidentFocused && ' ⚠'}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
               <span style={{

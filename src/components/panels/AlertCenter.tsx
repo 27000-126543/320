@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, ShieldAlert, Wrench, ChevronDown, ChevronUp,
   CheckCircle, Clock, MapPin, Zap, Flame, Fuel, AlertCircle,
   AlertOctagon, Sparkles, Send, Siren, Radio,
   Truck, Timer, User, FileText, ClipboardList, PlayCircle,
-  History, Layers, Flag, Activity,
+  History, Layers, Flag, Activity, Play, Pause, RotateCcw,
+  Crosshair, Building2, Gauge, ShieldCheck, Wind,
 } from 'lucide-react';
 import { useAlertStore } from '@/store/useAlertStore';
 import { useStationStore } from '@/store/useStationStore';
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils';
 import {
   Alert, AlertType, RepairOrder, RepairStatus, CommandStep,
   IncidentRecord, DEFAULT_COMMAND_STEPS, CommandStepKey,
+  GridOverloadImpact, GasLeakImpact,
 } from '@/types';
 
 type FilterType = 'all' | 'unresolved' | 'resolved';
@@ -29,6 +31,7 @@ const TYPE_CONFIG: Record<AlertType, { label: string; icon: React.ReactNode; col
   pressure_overrun: { label: '压力异常', icon: <Flame size={14} />, color: '#FF6B35' },
   gas_leak: { label: '燃气泄漏', icon: <Fuel size={14} />, color: '#00C48C' },
   equipment_fault: { label: '设备故障', icon: <Wrench size={14} />, color: '#9C27B0' },
+  grid_overload: { label: '电网负荷超限', icon: <Activity size={14} />, color: '#F59E0B' },
 };
 
 const REPAIR_STATUS_CONFIG: Record<RepairStatus, { label: string; color: string; bg: string }> = {
@@ -55,11 +58,17 @@ const STEP_ICON_MAP: Record<CommandStepKey, React.ReactNode> = {
   resolve: <CheckCircle size={14} />,
 };
 
+const LEAK_POINT_STATUS_LABEL: Record<GasLeakImpact['leakPointStatus'], string> = {
+  isolated: '已隔离',
+  sealed: '已封堵',
+  monitoring: '监测中',
+};
+
 export default function AlertCenter() {
   const {
     alerts, resolveAlert, triggerGasLeakDemo, repairOrders,
     incidentRecords, advanceCommandStep, setHighlightedIncident,
-    highlightedIncidentId,
+    highlightedIncidentId, focusIncident,
   } = useAlertStore();
   const { getStationById, setSelectedStationId } = useStationStore();
   const [filter, setFilter] = useState<FilterType>('unresolved');
@@ -102,6 +111,7 @@ export default function AlertCenter() {
   };
 
   const handleIncidentClick = (record: IncidentRecord) => {
+    focusIncident(record.id);
     setHighlightedIncident(record.id);
     setSelectedStationId(record.stationId || null);
   };
@@ -754,6 +764,144 @@ function CommandStepsCard({ steps, alertResolved, onAdvance }: CommandStepsCardP
   );
 }
 
+function GridImpactPanel({ impact }: { impact: GridOverloadImpact }) {
+  return (
+    <div className="space-y-2.5">
+      <div>
+        <div className="text-[10px] text-gray-500 mb-1.5 flex items-center gap-1">
+          <Building2 size={10} />受影响建筑
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {impact.affectedBuildings.map((b) => (
+            <span
+              key={b.id}
+              className="px-2 py-0.5 rounded text-[10px] border"
+              style={{
+                backgroundColor: 'rgba(30,144,255,0.1)',
+                borderColor: 'rgba(30,144,255,0.3)',
+                color: '#60a5fa',
+              }}
+            >
+              {b.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded bg-space-dark/60 border border-blue-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <Gauge size={9} />峰值负荷
+          </div>
+          <div className="text-sm font-bold font-mono" style={{ color: '#1E90FF' }}>
+            {impact.peakLoad}%
+          </div>
+        </div>
+        <div className="rounded bg-space-dark/60 border border-blue-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <Clock size={9} />峰值时间
+          </div>
+          <div className="text-[11px] font-mono text-white/85">
+            {impact.peakLoadTime?.slice(-8)}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded bg-space-dark/60 border border-blue-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <Zap size={9} />备用能源
+          </div>
+          <div className="text-[11px] flex items-center gap-1.5">
+            {impact.backupActivated ? (
+              <>
+                <ShieldCheck size={11} className="text-safe-green" />
+                <span className="text-safe-green font-medium">已启用</span>
+              </>
+            ) : (
+              <>
+                <AlertCircle size={11} className="text-warning-yellow" />
+                <span className="text-warning-yellow">未启用</span>
+              </>
+            )}
+          </div>
+          {impact.backupActivated && impact.backupActivatedTime && (
+            <div className="text-[9px] text-gray-500 mt-0.5 font-mono">
+              {impact.backupActivatedTime.slice(-8)}
+            </div>
+          )}
+        </div>
+        <div className="rounded bg-space-dark/60 border border-blue-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <Activity size={9} />恢复时间
+          </div>
+          <div className="text-[11px] font-mono text-white/85">
+            {impact.recoveryTime?.slice(-8) || '-'}
+          </div>
+        </div>
+      </div>
+
+      {impact.recoveryEffect && (
+        <div className="rounded bg-space-dark/60 border border-safe-green/20 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <CheckCircle size={9} />最终效果
+          </div>
+          <div className="text-[11px] text-safe-green/90">
+            {impact.recoveryEffect}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GasLeakImpactPanel({ impact }: { impact: GasLeakImpact }) {
+  return (
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded bg-space-dark/60 border border-green-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <Truck size={9} />抢修队到达
+          </div>
+          <div className="text-[11px] font-mono text-white/85">
+            {impact.repairTeamArrivalTime?.slice(-8) || '-'}
+          </div>
+        </div>
+        <div className="rounded bg-space-dark/60 border border-green-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <Timer size={9} />处置时长
+          </div>
+          <div className="text-sm font-bold font-mono" style={{ color: '#00C48C' }}>
+            {impact.repairDurationMinutes || '-'} 分钟
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded bg-space-dark/60 border border-green-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <ShieldCheck size={9} />泄漏点状态
+          </div>
+          <div className="text-[11px] flex items-center gap-1.5">
+            <CheckCircle size={11} className="text-safe-green" />
+            <span className="text-safe-green font-medium">
+              {LEAK_POINT_STATUS_LABEL[impact.leakPointStatus]}
+            </span>
+          </div>
+        </div>
+        <div className="rounded bg-space-dark/60 border border-green-500/10 p-2">
+          <div className="text-[10px] text-gray-500 mb-0.5 flex items-center gap-1">
+            <Wind size={9} />压力恢复
+          </div>
+          <div className="text-[11px] font-mono text-white/85">
+            {impact.gasPressureRestoreTime?.slice(-8) || '-'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface IncidentTimelineProps {
   records: IncidentRecord[];
   highlightedId: string | null;
@@ -799,10 +947,111 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
   const levelCfg = LEVEL_CONFIG[record.level];
   const typeCfg = TYPE_CONFIG[record.type];
 
+  const { replayState, setReplayState, setFocusIncident, focusIncidentId } = useAlertStore();
+  const isFocused = focusIncidentId === record.id;
+  const [localPlaying, setLocalPlaying] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const steps = record.process;
+  const currentStepIdx = isFocused ? replayState.currentStepIndex : -1;
+  const allCompleted = steps.every(s => s.completed);
+
+  const advanceStep = useCallback(() => {
+    if (replayState.incidentId !== record.id) return;
+    if (!allCompleted) return;
+    const nextIdx = Math.min(currentStepIdx + 1, steps.length - 1);
+    setReplayState({ currentStepIndex: nextIdx });
+    if (nextIdx >= steps.length - 1) {
+      setLocalPlaying(false);
+      setReplayState({ isPlaying: false });
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, [allCompleted, currentStepIdx, steps.length, setReplayState, replayState.incidentId, record.id]);
+
+  useEffect(() => {
+    if (localPlaying && replayState.incidentId !== record.id) {
+      setLocalPlaying(false);
+      setReplayState({ isPlaying: false });
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+    if (localPlaying && allCompleted) {
+      timerRef.current = setTimeout(() => {
+        advanceStep();
+      }, 1500);
+    }
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [localPlaying, currentStepIdx, advanceStep, allCompleted, replayState.incidentId, record.id, setReplayState]);
+
+  const resetReplay = useCallback(() => {
+    setLocalPlaying(false);
+    setReplayState({ currentStepIndex: -1, isPlaying: false });
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, [setReplayState]);
+
+  useEffect(() => {
+    resetReplay();
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [record.id]);
+
   const handleClick = () => {
     onClick();
     setExpanded(prev => !prev);
   };
+
+  const toggleFocus = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isFocused) {
+      setFocusIncident(null);
+      resetReplay();
+    } else {
+      setFocusIncident(record.id);
+      resetReplay();
+    }
+  };
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isFocused) {
+      setFocusIncident(record.id);
+      setReplayState({ currentStepIndex: 0, isPlaying: true });
+      setLocalPlaying(true);
+    } else {
+      if (localPlaying) {
+        setLocalPlaying(false);
+        setReplayState({ isPlaying: false });
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      } else {
+        if (currentStepIdx >= steps.length - 1) {
+          setReplayState({ currentStepIndex: 0 });
+        }
+        setLocalPlaying(true);
+        setReplayState({ isPlaying: true });
+      }
+    }
+  };
+
+  const isGridType = record.type === 'load_overrun' || record.type === 'pressure_overrun' || record.type === 'grid_overload';
+  const isGasLeak = record.type === 'gas_leak';
 
   return (
     <motion.div
@@ -875,12 +1124,26 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
               </div>
             </div>
           </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleClick(); }}
-            className="w-7 h-7 rounded-md flex items-center justify-center text-cyber-blue/60 hover:bg-cyber-blue/10 transition shrink-0"
-          >
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={toggleFocus}
+              className={cn(
+                'w-7 h-7 rounded-md flex items-center justify-center transition',
+                isFocused
+                  ? 'bg-alert-red/30 text-alert-red border border-alert-red/40'
+                  : 'text-cyber-blue/60 hover:bg-cyber-blue/10 hover:text-cyber-blue'
+              )}
+              title={isFocused ? '取消3D聚焦' : '3D场景聚焦'}
+            >
+              <Crosshair size={14} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleClick(); }}
+              className="w-7 h-7 rounded-md flex items-center justify-center text-cyber-blue/60 hover:bg-cyber-blue/10 transition shrink-0"
+            >
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
         </div>
 
         <AnimatePresence>
@@ -892,6 +1155,135 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
               className="overflow-hidden"
             >
               <div className="px-3 pb-3 pt-0 border-t border-cyber-blue/10 ml-0.5 space-y-3">
+                {allCompleted && (
+                  <div className="pt-3 relative rounded-lg border overflow-hidden"
+                    style={{
+                      borderColor: '#00D4FF30',
+                      background: 'linear-gradient(135deg, rgba(0,212,255,0.06) 0%, transparent 100%)',
+                    }}
+                  >
+                    <div className="absolute top-0 left-0 w-2.5 h-2.5 border-t-2 border-l-2" style={{ borderColor: '#00D4FF' }} />
+                    <div className="absolute top-0 right-0 w-2.5 h-2.5 border-t-2 border-r-2" style={{ borderColor: '#00D4FF' }} />
+                    <div className="absolute bottom-0 left-0 w-2.5 h-2.5 border-b-2 border-l-2" style={{ borderColor: '#00D4FF' }} />
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b-2 border-r-2" style={{ borderColor: '#00D4FF' }} />
+
+                    <div className="p-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: 'rgba(0,212,255,0.15)', color: '#00D4FF' }}>
+                            <PlayCircle size={13} />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-white/90">回放控制</div>
+                            <div className="text-[10px] text-gray-500">
+                              流程节点 {Math.max(0, currentStepIdx + 1)} / {steps.length}
+                              {isFocused && ' · 3D联动中'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={resetReplay}
+                            className="w-8 h-8 rounded-md flex items-center justify-center border transition"
+                            style={{
+                              borderColor: 'rgba(156,163,175,0.4)',
+                              backgroundColor: 'rgba(156,163,175,0.08)',
+                              color: '#9ca3af',
+                            }}
+                            title="重置"
+                          >
+                            <RotateCcw size={14} />
+                          </button>
+                          <button
+                            onClick={togglePlay}
+                            className="w-10 h-8 rounded-md flex items-center justify-center border transition"
+                            style={{
+                              borderColor: localPlaying
+                                ? 'rgba(255,59,92,0.5)'
+                                : 'rgba(0,230,118,0.5)',
+                              backgroundColor: localPlaying
+                                ? 'rgba(255,59,92,0.15)'
+                                : 'rgba(0,230,118,0.15)',
+                              color: localPlaying ? '#FF3B5C' : '#00E676',
+                              boxShadow: localPlaying
+                                ? '0 0 12px rgba(255,59,92,0.3), inset 0 0 10px rgba(255,59,92,0.1)'
+                                : '0 0 12px rgba(0,230,118,0.3), inset 0 0 10px rgba(0,230,118,0.1)',
+                            }}
+                            title={localPlaying ? '暂停' : '播放'}
+                          >
+                            {localPlaying ? <Pause size={16} /> : <Play size={16} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="relative flex items-start justify-between gap-1 px-1">
+                        {steps.map((step, idx) => {
+                          const isActive = idx <= currentStepIdx;
+                          const isCurrentNode = idx === currentStepIdx;
+                          const icon = STEP_ICON_MAP[step.key];
+
+                          return (
+                            <div key={step.key} className="flex-1 flex flex-col items-center relative min-w-0">
+                              {idx > 0 && (
+                                <div
+                                  className="absolute top-4 -left-1/2 right-1/2 h-0.5 -translate-y-1/2 transition-all duration-500"
+                                  style={{
+                                    background: isActive
+                                      ? 'linear-gradient(90deg, #00E676, #00D4FF)'
+                                      : 'linear-gradient(90deg, #374151, #1F2937)',
+                                    width: '100%',
+                                    boxShadow: isActive ? '0 0 8px rgba(0,230,118,0.5)' : 'none',
+                                  }}
+                                />
+                              )}
+                              <div className="relative z-10 flex flex-col items-center">
+                                <div
+                                  className={cn(
+                                    'w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 shrink-0',
+                                    isCurrentNode
+                                      ? 'bg-cyber-blue/30 border-cyber-blue text-cyber-blue scale-110'
+                                      : isActive
+                                        ? 'bg-safe-green/20 border-safe-green text-safe-green'
+                                        : 'bg-space-dark border-gray-600 text-gray-500'
+                                  )}
+                                  style={isCurrentNode ? {
+                                    boxShadow: '0 0 16px rgba(0,212,255,0.7), inset 0 0 8px rgba(0,212,255,0.2)',
+                                  } : isActive ? {
+                                    boxShadow: '0 0 8px rgba(0,230,118,0.4)',
+                                  } : {}}
+                                >
+                                  {isActive && !isCurrentNode ? (
+                                    <CheckCircle size={14} />
+                                  ) : (
+                                    <>{icon}</>
+                                  )}
+                                  {isCurrentNode && (
+                                    <div className="absolute inset-0 rounded-full border-2 border-cyber-blue animate-ping opacity-40" />
+                                  )}
+                                </div>
+                                <div className={cn(
+                                  'mt-1.5 text-[10px] text-center leading-tight px-0.5 transition-colors',
+                                  isCurrentNode
+                                    ? 'text-cyber-blue font-bold'
+                                    : isActive ? 'text-safe-green' : 'text-gray-500'
+                                )}>
+                                  {step.title}
+                                </div>
+                                {isActive && step.time && (
+                                  <div className="mt-0.5 text-[9px] text-gray-500 text-center leading-tight font-mono">
+                                    {step.time.slice(-8)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-3 rounded-md bg-cyber-blue/5 border border-cyber-blue/15 p-3">
                   <div className="text-[11px] text-cyber-blue font-bold mb-2 flex items-center gap-1.5">
                     <FileText size={12} />本次事件复盘详情
@@ -910,28 +1302,42 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
                       <div className="absolute left-[7px] top-1 bottom-1 w-px bg-gradient-to-b from-safe-green via-cyber-blue/50 to-transparent" />
                       {record.process.map((step, idx) => {
                         const icon = STEP_ICON_MAP[step.key];
+                        const isCurrentReplay = isFocused && idx === currentStepIdx;
                         return (
                           <div key={step.key} className="relative">
                             <div
                               className={cn(
-                                'absolute -left-4 top-0.5 w-2 h-2 rounded-full ring-2 ring-space-dark',
-                                step.completed ? 'bg-safe-green' : 'bg-gray-600'
+                                'absolute -left-4 top-0.5 w-2 h-2 rounded-full ring-2 ring-space-dark transition-all',
+                                step.completed ? 'bg-safe-green' : 'bg-gray-600',
+                                isCurrentReplay && 'scale-150'
                               )}
-                              style={step.completed ? { boxShadow: '0 0 6px #00E67680' } : {}}
+                              style={{
+                                ...(step.completed ? { boxShadow: '0 0 6px #00E67680' } : {}),
+                                ...(isCurrentReplay ? { boxShadow: '0 0 12px #00D4FF' } : {}),
+                              }}
                             />
-                            <div className="text-[10px]">
+                            <div className={cn(
+                              'text-[10px] rounded px-2 py-1.5 transition-all',
+                              isCurrentReplay && 'bg-cyber-blue/15 border border-cyber-blue/30 -mx-2'
+                            )}>
                               <div className="flex items-center gap-1.5">
                                 <span className={step.completed ? 'text-safe-green' : 'text-gray-500'}>
                                   {icon}
                                 </span>
                                 <span className={cn(
                                   'font-medium',
-                                  step.completed ? 'text-safe-green' : 'text-gray-500'
+                                  step.completed ? 'text-safe-green' : 'text-gray-500',
+                                  isCurrentReplay && 'text-cyber-blue font-bold'
                                 )}>
                                   {step.title}
                                 </span>
                                 {step.completed && step.time && (
                                   <span className="text-gray-500 font-mono ml-auto">{step.time.slice(-8)}</span>
+                                )}
+                                {isCurrentReplay && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyber-blue/30 text-cyber-blue ml-1 animate-pulse">
+                                    播放中
+                                  </span>
                                 )}
                               </div>
                               {step.completed && step.handler && (
@@ -947,6 +1353,26 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
                       })}
                     </div>
                   </div>
+
+                  {(isGridType && record.gridOverloadImpact) && (
+                    <div className="mb-3 rounded-md bg-gradient-to-br from-blue-500/8 to-transparent border border-blue-500/20 p-3">
+                      <div className="text-[11px] font-bold mb-2.5 flex items-center gap-1.5"
+                        style={{ color: '#1E90FF' }}>
+                        <Activity size={12} />事件影响分析 · 电网负荷类
+                      </div>
+                      <GridImpactPanel impact={record.gridOverloadImpact} />
+                    </div>
+                  )}
+
+                  {isGasLeak && record.gasLeakImpact && (
+                    <div className="mb-3 rounded-md bg-gradient-to-br from-green-500/8 to-transparent border border-green-500/20 p-3">
+                      <div className="text-[11px] font-bold mb-2.5 flex items-center gap-1.5"
+                        style={{ color: '#00C48C' }}>
+                        <Wind size={12} />事件影响分析 · 燃气泄漏类
+                      </div>
+                      <GasLeakImpactPanel impact={record.gasLeakImpact} />
+                    </div>
+                  )}
 
                   {record.impact && (
                     <div className="text-[11px] text-white/80 bg-warning-yellow/10 border border-warning-yellow/20 rounded p-2 mb-2">
@@ -968,3 +1394,4 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
     </motion.div>
   );
 }
+

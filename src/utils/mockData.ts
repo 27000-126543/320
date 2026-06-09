@@ -408,8 +408,19 @@ export const generateMockIncidentRecords = (): IncidentRecord[] => {
       result: 'resolved',
       summary: '滨江路中压燃气管线因第三方施工损坏导致泄漏，经多部门协同处置，35分钟内完成抢修并恢复供气，未造成人员伤亡。',
       process: generateProcess(true),
-      impact: '影响周边3个小区约1200户居民临时停气约50分钟，经临时供气措施缓解后逐步恢复。',
+      impactAnalysis: {
+        affectedBuildings: [
+          { id: 'bld-1', name: '滨江小区A区', code: 'BJ-A' },
+          { id: 'bld-2', name: '滨江小区B区', code: 'BJ-B' },
+          { id: 'bld-3', name: '花园小区', code: 'HY-1' },
+        ],
+        repairTeamArrivalTime: formatDateTime(new Date(Date.now() - 170 * 60 * 1000)),
+        repairDurationMinutes: 35,
+        leakPointStatus: 'sealed',
+        gasPressureRestoreTime: formatDateTime(new Date(Date.now() - 145 * 60 * 1000)),
+      },
       repairOrderId: 'repair-hist-001',
+      repairTeamId: 'team-01',
     },
     {
       id: generateId(),
@@ -426,7 +437,14 @@ export const generateMockIncidentRecords = (): IncidentRecord[] => {
       result: 'resolved',
       summary: '晚高峰时段高新区负荷突增，启动储能电站联合放电及需求侧响应，25分钟内将负荷控制在安全范围。',
       process: generateProcess(true),
-      impact: '通过调度措施避免了变电站过载跳闸，核心商圈未受影响，仅部分非重要负荷参与削峰响应。',
+      impactAnalysis: {
+        peakLoad: 95,
+        peakLoadTime: formatDateTime(new Date(Date.now() - 410 * 60 * 1000)),
+        backupActivated: true,
+        backupStartTime: formatDateTime(new Date(Date.now() - 418 * 60 * 1000)),
+        recoveryTime: formatDateTime(new Date(Date.now() - 395 * 60 * 1000)),
+        recoveryEffect: '系统负荷已恢复至正常范围(72%)',
+      },
     },
     {
       id: generateId(),
@@ -443,7 +461,12 @@ export const generateMockIncidentRecords = (): IncidentRecord[] => {
       result: 'resolved',
       summary: '1#循环水泵轴承过热触发保护停机，自动切换备用泵，维修人员现场检修更换轴承后恢复。',
       process: generateProcess(true),
-      impact: '供热压力短暂波动约5分钟，备用系统启动后恢复正常，未对用户造成明显影响。',
+      impactAnalysis: {
+        backupActivated: true,
+        backupStartTime: formatDateTime(new Date(Date.now() - 718 * 60 * 1000)),
+        recoveryTime: formatDateTime(new Date(Date.now() - 715 * 60 * 1000)),
+        recoveryEffect: '供热压力恢复正常',
+      },
     },
   ];
 };
