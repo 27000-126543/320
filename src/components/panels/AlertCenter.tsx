@@ -995,13 +995,14 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
   }, [localPlaying, currentStepIdx, advanceStep, allCompleted, replayState.incidentId, record.id, setReplayState]);
 
   const resetReplay = useCallback(() => {
+    if (replayState.incidentId !== record.id) return;
     setLocalPlaying(false);
-    setReplayState({ currentStepIndex: -1, isPlaying: false });
+    setReplayState({ incidentId: record.id, currentStepIndex: -1, isPlaying: false });
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-  }, [setReplayState]);
+  }, [setReplayState, replayState.incidentId, record.id]);
 
   useEffect(() => {
     resetReplay();
@@ -1030,9 +1031,10 @@ function IncidentRecordCard({ record, highlighted, onClick, stationName }: Incid
     e.stopPropagation();
     if (!isFocused) {
       setFocusIncident(record.id);
-      setReplayState({ currentStepIndex: 0, isPlaying: true });
+      setReplayState({ incidentId: record.id, currentStepIndex: 0, isPlaying: true });
       setLocalPlaying(true);
     } else {
+      if (replayState.incidentId !== record.id) return;
       if (localPlaying) {
         setLocalPlaying(false);
         setReplayState({ isPlaying: false });

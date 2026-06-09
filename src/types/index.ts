@@ -172,6 +172,7 @@ export interface IncidentRecord {
   alertId: string;
   location?: Vec3;
   stationId?: string;
+  buildingIds?: string[];
   result: 'resolved' | 'ongoing';
   summary: string;
   process: CommandStep[];
