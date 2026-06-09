@@ -598,7 +598,7 @@ export default function ApprovalPage() {
                           'border-b border-white/5 hover:bg-cyber-blue/5 transition cursor-pointer group',
                           needMyAction && 'bg-warning-yellow/5'
                         )}
-                        onClick={() => setSelectedPlan(plan)}
+                        onClick={() => setSelectedPlanId(plan.id)}
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">

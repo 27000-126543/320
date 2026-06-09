@@ -93,15 +93,23 @@ const RepairPath = ({ order }: RepairPathProps) => {
     let targetProgress = 0;
     switch (order.status) {
       case 'dispatched':
-        targetProgress = 0.05;
+        targetProgress = 0.02;
         break;
       case 'enroute':
-        targetProgress = 0.3 + (Math.sin(t * 0.3) * 0.1 + 0.5) * 0.6;
+        // 平滑向前推进：0 → 0.95，用时间+状态索引映射
+        {
+          const statusIdx = 1;
+          const phaseBase = statusIdx / 4;
+          const phaseAdvance = (Math.sin(t * 0.05) * 0.5 + 0.5) * 0.25;
+          targetProgress = Math.min(0.95, phaseBase + phaseAdvance + 0.05);
+        }
         break;
       case 'arrived':
         targetProgress = 0.98;
         break;
       case 'repairing':
+        targetProgress = 0.99;
+        break;
       case 'completed':
         targetProgress = 1;
         break;
@@ -109,7 +117,9 @@ const RepairPath = ({ order }: RepairPathProps) => {
 
     setProgress((prev) => {
       const diff = targetProgress - prev;
-      return prev + diff * 0.02;
+      // enroute 阶段需要更快的响应速度，其他阶段平滑即可
+      const step = order.status === 'enroute' ? 0.03 : 0.05;
+      return prev + diff * step;
     });
 
     if (vehicleRef.current) {
